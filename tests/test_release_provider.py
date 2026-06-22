@@ -1,0 +1,221 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the dnf-plugin-anyrepo project.
+
+import os
+import tempfile
+import unittest
+import urllib.error
+from datetime import datetime, timedelta, timezone
+from unittest import mock
+
+from dnf_plugin_anyrepo.config import RepoConfig
+from dnf_plugin_anyrepo.providers.github_release import ProviderError, GitHubReleaseProvider
+
+
+class GitHubReleaseProviderTest(unittest.TestCase):
+    def make_config(self, tmp, name="prec"):
+        return RepoConfig(
+            name=name,
+            source="github-release",
+            url="https://github.com/jfut/prec",
+            asset_regex=r".*\.rpm$",
+            enabled=True,
+            minimum_release_age=0,
+            cache_dir=tmp,
+            refresh_interval=600,
+        )
+
+    def test_minimum_release_age(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.make_config(tmp)
+            config.minimum_release_age = 3600
+            provider = GitHubReleaseProvider(config)
+            young = {
+                "published_at": (
+                    datetime.now(timezone.utc) - timedelta(seconds=60)
+                ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            }
+            old = {
+                "published_at": (
+                    datetime.now(timezone.utc) - timedelta(seconds=7200)
+                ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            }
+            self.assertFalse(provider._release_is_old_enough(young))
+            self.assertTrue(provider._release_is_old_enough(old))
+
+    def test_matching_assets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.make_config(tmp)
+            config.asset_regex = r"\.rpm$"
+            provider = GitHubReleaseProvider(config)
+            assets = provider._matching_assets(
+                {"assets": [{"name": "prec.rpm"}, {"name": "checksums.txt"}]}
+            )
+            self.assertEqual([asset["name"] for asset in assets], ["prec.rpm"])
+
+    def test_matching_assets_honors_arch_and_releasever(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.make_config(tmp, name="tool")
+            config.asset_regex = r"\.rpm$"
+            config.arch = "x86_64"
+            config.releasever = "el9"
+            provider = GitHubReleaseProvider(config)
+            assets = provider._matching_assets(
+                {
+                    "assets": [
+                        {"name": "tool-1.0-1.el9.x86_64.rpm"},
+                        {"name": "tool-1.0-1.el9.noarch.rpm"},
+                        {"name": "tool-1.0-1.el8.x86_64.rpm"},
+                        {"name": "tool-1.0-1.el10.x86_64.rpm"},
+                        {"name": "tool-1.0-1.el9.aarch64.rpm"},
+                        {"name": "single-1.0-1.x86_64.rpm"},
+                    ]
+                }
+            )
+            self.assertEqual(
+                [asset["name"] for asset in assets],
+                [
+                    "tool-1.0-1.el9.x86_64.rpm",
+                    "tool-1.0-1.el9.noarch.rpm",
+                    "single-1.0-1.x86_64.rpm",
+                ],
+            )
+
+    def test_matching_assets_falls_back_to_nearest_lower_releasever(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.make_config(tmp, name="tool")
+            config.asset_regex = r"\.rpm$"
+            config.arch = "x86_64"
+            config.releasever = "el10"
+            provider = GitHubReleaseProvider(config)
+            assets = provider._matching_assets(
+                {
+                    "assets": [
+                        {"name": "tool-1.0-1.el8.x86_64.rpm"},
+                        {"name": "tool-1.0-1.el9.x86_64.rpm"},
+                        {"name": "tool-1.0-1.el11.x86_64.rpm"},
+                        {"name": "single-1.0-1.x86_64.rpm"},
+                    ]
+                }
+            )
+            self.assertEqual(
+                [asset["name"] for asset in assets],
+                [
+                    "tool-1.0-1.el9.x86_64.rpm",
+                    "single-1.0-1.x86_64.rpm",
+                ],
+            )
+
+    def test_matching_assets_uses_older_releasever_when_only_older_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.make_config(tmp, name="tool")
+            config.asset_regex = r"\.rpm$"
+            config.arch = "x86_64"
+            config.releasever = "el9"
+            provider = GitHubReleaseProvider(config)
+            assets = provider._matching_assets(
+                {
+                    "assets": [
+                        {"name": "tool-1.0-1.el8.x86_64.rpm"},
+                        {"name": "tool-1.0-1.el10.x86_64.rpm"},
+                    ]
+                }
+            )
+            self.assertEqual(
+                [asset["name"] for asset in assets],
+                ["tool-1.0-1.el8.x86_64.rpm"],
+            )
+
+    def test_request_json_retries_transient_http_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = GitHubReleaseProvider(self.make_config(tmp))
+            response = mock.Mock()
+            response.read.return_value = b'{"tag_name": "v1"}'
+            response.__enter__ = mock.Mock(return_value=response)
+            response.__exit__ = mock.Mock(return_value=False)
+            transient = urllib.error.HTTPError(
+                url="https://api.github.com/repos/jfut/prec/releases/latest",
+                code=504,
+                msg="Gateway Timeout",
+                hdrs=None,
+                fp=None,
+            )
+            with mock.patch("time.sleep") as sleep_mock:
+                with mock.patch(
+                    "urllib.request.urlopen",
+                    side_effect=[transient, response],
+                ) as urlopen_mock:
+                    data = provider._request_json(
+                        "https://api.github.com/repos/jfut/prec/releases/latest"
+                    )
+            self.assertEqual(data["tag_name"], "v1")
+            self.assertEqual(urlopen_mock.call_count, 2)
+            sleep_mock.assert_called_once_with(1.0)
+
+    def test_fetch_latest_release_falls_back_to_releases_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            provider = GitHubReleaseProvider(self.make_config(tmp))
+            transient = urllib.error.HTTPError(
+                url="https://api.github.com/repos/jfut/prec/releases/latest",
+                code=504,
+                msg="Gateway Timeout",
+                hdrs=None,
+                fp=None,
+            )
+            list_response = mock.Mock()
+            list_response.read.return_value = (
+                b'[{"tag_name":"v-next","draft":true},'
+                b'{"tag_name":"v1","published_at":"2026-06-21T00:00:00Z","assets":[]}]'
+            )
+            list_response.__enter__ = mock.Mock(return_value=list_response)
+            list_response.__exit__ = mock.Mock(return_value=False)
+            with mock.patch("time.sleep"):
+                with mock.patch(
+                    "urllib.request.urlopen",
+                    side_effect=[
+                        transient,
+                        transient,
+                        transient,
+                        list_response,
+                    ],
+                ):
+                    release = provider._fetch_latest_release()
+            self.assertEqual(release["tag_name"], "v1")
+
+    def test_replace_cache_keeps_existing_cache_on_download_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = os.path.join(tmp, "prec")
+            packages_path = os.path.join(cache_path, "packages")
+            os.makedirs(packages_path)
+            os.makedirs(os.path.join(cache_path, "repodata"))
+            old_package = os.path.join(packages_path, "old.rpm")
+            with open(old_package, "wb") as fh:
+                fh.write(b"old")
+
+            config = self.make_config(tmp)
+            config.asset_regex = r"\.rpm$"
+            provider = GitHubReleaseProvider(config)
+            provider.release = {"id": 1, "tag_name": "v1"}
+            provider.assets = [
+                {
+                    "id": 1,
+                    "name": "new.rpm",
+                    "updated_at": "2026-06-21T00:00:00Z",
+                    "browser_download_url": "https://example.invalid/new.rpm",
+                }
+            ]
+
+            with mock.patch.object(
+                provider,
+                "_download_file",
+                side_effect=ProviderError("download failed"),
+            ):
+                with self.assertRaises(ProviderError):
+                    provider._replace_cache()
+
+            self.assertTrue(os.path.isfile(old_package))
+            self.assertTrue(os.path.isdir(os.path.join(cache_path, "repodata")))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,240 @@
+version: 2
+
+project_name: dnf-plugin-anyrepo
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
+
+report_sizes: true
+
+gomod:
+  gobinary: /bin/true
+
+builds:
+  - id: dnf-plugin-anyrepo
+    skip: true
+
+archives:
+  - id: source
+    meta: true
+    formats: ["tar.gz"]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_source"
+    files:
+      - README.md
+      - LICENSE
+      - setup.py
+      - pyproject.toml
+      - dnf_plugin_anyrepo/*.py
+      - dnf_plugin_anyrepo/providers/*.py
+      - plugins/*.py
+      - packaging/*
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+checksum:
+  name_template: "checksums.txt"
+
+nfpms:
+  - id: dnf-plugin-anyrepo-el8
+    meta: true
+    package_name: dnf-plugin-anyrepo
+    file_name_template: "{{ .PackageName }}-{{ .Version }}-{{ .Release }}.el8.noarch"
+    description: |-
+      dnf-plugin-anyrepo exposes RPM assets from configured download sources as
+      local DNF repositories.
+    maintainer: dnf-plugin-anyrepo contributors <noreply@example.invalid>
+    license: Apache-2.0
+    vendor: dnf-plugin-anyrepo project
+    homepage: https://github.com/jfut/dnf-plugin-anyrepo
+    section: utils
+    formats:
+      - rpm
+    release: 1
+    dependencies:
+      - python3
+      - python3-dnf
+      - createrepo_c
+    contents:
+      - src: packaging/dnf-anyrepo
+        dst: /usr/bin/dnf-anyrepo
+        file_info:
+          mode: 0755
+          owner: root
+          group: root
+      - src: dnf_plugin_anyrepo/
+        dst: /usr/lib/python3.6/site-packages/dnf_plugin_anyrepo
+        type: tree
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: plugins/anyrepo.py
+        dst: /usr/lib/python3.6/site-packages/dnf-plugins/anyrepo.py
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: packaging/anyrepo.conf
+        dst: /etc/dnf/plugins/anyrepo.conf
+        type: config|noreplace
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: packaging/anyrepo.repo
+        dst: /etc/yum.repos.d/anyrepo.repo
+        type: config|noreplace
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: LICENSE
+        dst: /usr/share/licenses/dnf-plugin-anyrepo/LICENSE
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: README.md
+        dst: /usr/share/doc/dnf-plugin-anyrepo/README.md
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+  - id: dnf-plugin-anyrepo-el9
+    meta: true
+    package_name: dnf-plugin-anyrepo
+    file_name_template: "{{ .PackageName }}-{{ .Version }}-{{ .Release }}.el9.noarch"
+    description: |-
+      dnf-plugin-anyrepo exposes RPM assets from configured download sources as
+      local DNF repositories.
+    maintainer: dnf-plugin-anyrepo contributors <noreply@example.invalid>
+    license: Apache-2.0
+    vendor: dnf-plugin-anyrepo project
+    homepage: https://github.com/jfut/dnf-plugin-anyrepo
+    section: utils
+    formats:
+      - rpm
+    release: 1
+    dependencies:
+      - python3
+      - python3-dnf
+      - createrepo_c
+    contents:
+      - src: packaging/dnf-anyrepo
+        dst: /usr/bin/dnf-anyrepo
+        file_info:
+          mode: 0755
+          owner: root
+          group: root
+      - src: dnf_plugin_anyrepo/
+        dst: /usr/lib/python3.9/site-packages/dnf_plugin_anyrepo
+        type: tree
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: plugins/anyrepo.py
+        dst: /usr/lib/python3.9/site-packages/dnf-plugins/anyrepo.py
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: packaging/anyrepo.conf
+        dst: /etc/dnf/plugins/anyrepo.conf
+        type: config|noreplace
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: packaging/anyrepo.repo
+        dst: /etc/yum.repos.d/anyrepo.repo
+        type: config|noreplace
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: LICENSE
+        dst: /usr/share/licenses/dnf-plugin-anyrepo/LICENSE
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: README.md
+        dst: /usr/share/doc/dnf-plugin-anyrepo/README.md
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+  - id: dnf-plugin-anyrepo-el10
+    meta: true
+    package_name: dnf-plugin-anyrepo
+    file_name_template: "{{ .PackageName }}-{{ .Version }}-{{ .Release }}.el10.noarch"
+    description: |-
+      dnf-plugin-anyrepo exposes RPM assets from configured download sources as
+      local DNF repositories.
+    maintainer: dnf-plugin-anyrepo contributors <noreply@example.invalid>
+    license: Apache-2.0
+    vendor: dnf-plugin-anyrepo project
+    homepage: https://github.com/jfut/dnf-plugin-anyrepo
+    section: utils
+    formats:
+      - rpm
+    release: 1
+    dependencies:
+      - python3
+      - python3-dnf
+      - createrepo_c
+    contents:
+      - src: packaging/dnf-anyrepo
+        dst: /usr/bin/dnf-anyrepo
+        file_info:
+          mode: 0755
+          owner: root
+          group: root
+      - src: dnf_plugin_anyrepo/
+        dst: /usr/lib/python3.12/site-packages/dnf_plugin_anyrepo
+        type: tree
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: plugins/anyrepo.py
+        dst: /usr/lib/python3.12/site-packages/dnf-plugins/anyrepo.py
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: packaging/anyrepo.conf
+        dst: /etc/dnf/plugins/anyrepo.conf
+        type: config|noreplace
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: packaging/anyrepo.repo
+        dst: /etc/yum.repos.d/anyrepo.repo
+        type: config|noreplace
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: LICENSE
+        dst: /usr/share/licenses/dnf-plugin-anyrepo/LICENSE
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - src: README.md
+        dst: /usr/share/doc/dnf-plugin-anyrepo/README.md
+        file_info:
+          mode: 0644
+          owner: root
+          group: root

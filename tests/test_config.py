@@ -1,0 +1,183 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the dnf-plugin-anyrepo project.
+
+import os
+import tempfile
+import unittest
+from unittest import mock
+
+from dnf_plugin_anyrepo.config import (
+    ConfigError,
+    add_repo,
+    load_config,
+    parse_duration,
+    parse_github_url,
+    repo_name_from_url,
+    set_value,
+)
+
+
+class ConfigTest(unittest.TestCase):
+    def test_parse_duration(self):
+        self.assertEqual(parse_duration("600"), 600)
+        self.assertEqual(parse_duration("30m"), 1800)
+        self.assertEqual(parse_duration("1h"), 3600)
+        self.assertEqual(parse_duration("2d"), 172800)
+
+    def test_parse_github_url(self):
+        self.assertEqual(parse_github_url("https://github.com/jfut/prec"), ("jfut", "prec"))
+        self.assertEqual(parse_github_url("https://github.com/jfut/prec.git"), ("jfut", "prec"))
+
+    def test_load_repo_inherits_main(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "[main]\n"
+                    f"cache_dir = {tmp}\n"
+                    "minimum_release_age = 1h\n"
+                    "\n"
+                    "[prec]\n"
+                    "url = https://github.com/jfut/prec\n"
+                )
+            config = load_config(path)
+            self.assertEqual(config.repos["prec"].minimum_release_age, 3600)
+            self.assertEqual(config.repos["prec"].source, "github-release")
+            self.assertTrue(config.repos["prec"].enabled)
+            self.assertFalse(config.main.debug)
+
+    def test_load_main_debug(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("[main]\ndebug = 1\n")
+            config = load_config(path)
+            self.assertTrue(config.main.debug)
+
+    def test_add_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            add_repo(path, "prec", "https://github.com/jfut/prec")
+            config = load_config(path)
+            self.assertIn("prec", config.repos)
+
+    def test_repo_name_from_url_uses_repo_name(self):
+        self.assertEqual(
+            repo_name_from_url("https://github.com/jfut/prec"),
+            "prec",
+        )
+
+    def test_load_repo_defaults_arch_to_current_arch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            add_repo(path, "prec", "https://github.com/jfut/prec")
+            with mock.patch("dnf_plugin_anyrepo.config.current_arch", return_value="x86_64"):
+                config = load_config(path)
+            self.assertEqual(config.repos["prec"].arch, "x86_64")
+
+    def test_load_repo_defaults_releasever_to_current_releasever(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            add_repo(path, "prec", "https://github.com/jfut/prec")
+            with mock.patch("dnf_plugin_anyrepo.config.current_releasever", return_value="el9"):
+                config = load_config(path)
+            self.assertEqual(config.repos["prec"].releasever, "el9")
+
+    def test_write_config_without_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                add_repo("anyrepo.conf", "prec", "https://github.com/jfut/prec")
+                self.assertTrue(os.path.isfile("anyrepo.conf"))
+            finally:
+                os.chdir(cwd)
+
+    def test_rejects_unsupported_source_before_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with self.assertRaises(ConfigError):
+                add_repo(path, "prec", "https://github.com/jfut/prec", source="bad")
+            self.assertFalse(os.path.exists(path))
+
+    def test_rejects_invalid_asset_regex_before_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with self.assertRaises(ConfigError):
+                add_repo(
+                    path,
+                    "prec",
+                    "https://github.com/jfut/prec",
+                    values={"asset_regex": "["},
+                )
+            self.assertFalse(os.path.exists(path))
+
+    def test_set_rejects_invalid_repo_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            add_repo(path, "prec", "https://github.com/jfut/prec")
+            with self.assertRaises(ConfigError):
+                set_value(path, "prec", "asset_regex", "[")
+            with self.assertRaises(ConfigError):
+                set_value(path, "prec", "source", "bad")
+            with self.assertRaises(ConfigError):
+                set_value(path, "prec", "enabled", "maybe")
+            with self.assertRaises(ConfigError):
+                set_value(path, "prec", "refresh_interval", "soon")
+            with self.assertRaises(ConfigError):
+                set_value(path, "prec", "url", "https://example.com/jfut/prec")
+            with self.assertRaises(ConfigError):
+                set_value(path, "prec", "unknown_key", "value")
+
+    def test_set_rejects_invalid_main_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with self.assertRaises(ConfigError):
+                set_value(path, "main", "debug", "maybe")
+            with self.assertRaises(ConfigError):
+                set_value(path, "main", "minimum_release_age", "later")
+            with self.assertRaises(ConfigError):
+                set_value(path, "main", "unknown_key", "value")
+
+    def test_add_repo_rejects_invalid_enabled_value_before_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with self.assertRaises(ConfigError):
+                add_repo(
+                    path,
+                    "prec",
+                    "https://github.com/jfut/prec",
+                    values={"enabled": "maybe"},
+                )
+            self.assertFalse(os.path.exists(path))
+
+    def test_add_repo_rejects_invalid_alias_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with self.assertRaises(ConfigError):
+                add_repo(path, "main", "https://github.com/jfut/prec")
+            with self.assertRaises(ConfigError):
+                add_repo(path, "bad[name]", "https://github.com/jfut/prec")
+            self.assertFalse(os.path.exists(path))
+
+    def test_load_rejects_unknown_main_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                # Catch typos that would otherwise make the intended setting inert.
+                fh.write("[main]\nminimum_release_gae = 1h\n")
+            with self.assertRaises(ConfigError):
+                load_config(path)
+
+    def test_load_rejects_unknown_repo_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                # Catch typos that would otherwise leave the repository enabled.
+                fh.write("[prec]\nurl = https://github.com/jfut/prec\nenabledd = false\n")
+            with self.assertRaises(ConfigError):
+                load_config(path)
+
+
+if __name__ == "__main__":
+    unittest.main()

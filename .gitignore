@@ -1,0 +1,7 @@
+dist/
+tmp/
+tmp.*
+
+.pytest_cache
+__pycache__
+dnf_plugin_anyrepo.egg-info

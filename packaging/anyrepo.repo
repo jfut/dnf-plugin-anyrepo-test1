@@ -1,0 +1,6 @@
+[anyrepo]
+name = AnyRepo repositories
+enabled = 1
+baseurl = file:///var/empty
+skip_if_unavailable = 1
+gpgcheck = 0
