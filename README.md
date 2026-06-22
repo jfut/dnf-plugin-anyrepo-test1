@@ -3,13 +3,14 @@
 ![Tag](https://img.shields.io/github/tag/jfut/dnf-plugin-anyrepo.svg)
 [![License](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/jfut/dnf-plugin-anyrepo/blob/main/LICENSE)
 
-`dnf-plugin-anyrepo` is a DNF plugin that turns configured remote RPM assets into local `file://` repositories for DNF.
+`dnf-plugin-anyrepo` is a DNF plugin that makes remote RPM assets available to ordinary DNF commands as transparent, dynamic local RPM repositories.
 
-The current implementation supports GitHub Releases via `source = github-release`.
+The current implementation supports GitHub Releases via `source = github-release`, and other asset sources may be added in the future.
 
 ## Why use it
 
-With this plugin, users can install and update RPMs published as GitHub release assets through ordinary DNF commands instead of downloading RPM files manually.
+With this plugin, users can install and update RPMs published as remote release assets through ordinary DNF commands.
+AnyRepo refreshes and registers the matching assets as local `file://` repositories behind the scenes, so users do not need to download RPM files or manage repository metadata manually.
 
 Typical examples:
 
@@ -31,37 +32,165 @@ Install from GitHub Releases by choosing the RPM that matches the target RHEL ma
 
 ```bash
 # RHEL 8, AlmaLinux 8, Rocky Linux 8, and other compatible distributions.
-dnf install https://github.com/jfut/dnf-plugin-anyrepo/releases/download/vX.Y.Z/dist/dnf-plugin-anyrepo-x.y.z-n.el8.noarch.rpm
+dnf install https://github.com/jfut/dnf-plugin-anyrepo/releases/download/vX.Y.Z/dnf-plugin-anyrepo-x.y.z-n.el8.noarch.rpm
 
 # RHEL 9, AlmaLinux 9, Rocky Linux 9, and other compatible distributions.
-dnf install https://github.com/jfut/dnf-plugin-anyrepo/releases/download/vX.Y.Z/dist/dnf-plugin-anyrepo-x.y.z-n.el9.noarch.rpm
+dnf install https://github.com/jfut/dnf-plugin-anyrepo/releases/download/vX.Y.Z/dnf-plugin-anyrepo-x.y.z-n.el9.noarch.rpm
 
 # RHEL 10, AlmaLinux 10, Rocky Linux 10, and other compatible distributions.
-dnf install https://github.com/jfut/dnf-plugin-anyrepo/releases/download/vX.Y.Z/dist/dnf-plugin-anyrepo-x.y.z-n.el10.noarch.rpm
+dnf install https://github.com/jfut/dnf-plugin-anyrepo/releases/download/vX.Y.Z/dnf-plugin-anyrepo-x.y.z-n.el10.noarch.rpm
 ```
 
-## Example using prec
+## Example workflow
 
-After installation, a typical workflow for [prec](https://github.com/jfut/prec) looks like this:
+After installation, register GitHub repositories that publish RPM assets:
+
+Use `--name` to register a repository under an alias instead of the repository name.
 
 ```bash
-# Register the GitHub repository.
-# dnf-anyrepo add https://github.com/jfut/prec --name prec
-/etc/dnf/plugins/anyrepo.conf: Added [prec]
+# dnf-anyrepo add https://github.com/jfut/dnf-plugin-anyrepo
+# dnf-anyrepo add https://github.com/jfut/prec
+# dnf-anyrepo add https://github.com/jfut/sslcert-cli
+# dnf-anyrepo add https://github.com/jfut/nmcli-cli
+# dnf-anyrepo add https://github.com/jfut/ipset-fast-update
+# dnf-anyrepo add https://github.com/firehol/packages --name firehol
+```
 
-# Inspect the configured repository.
-dnf-anyrepo list
-dnf-anyrepo show prec
+List repositories managed by AnyRepo:
 
-# Refresh the local cache explicitly.
-dnf-anyrepo refresh prec
+```bash
+# dnf-anyrepo list
+NAME                SOURCE          URL                                         ENABLED  MIN_AGE
+dnf-plugin-anyrepo  github-release  https://github.com/jfut/dnf-plugin-anyrepo  yes      global(3d)
+firehol             github-release  https://github.com/firehol/packages         yes      global(3d)
+ipset-fast-update   github-release  https://github.com/jfut/ipset-fast-update   yes      global(3d)
+nmcli-cli           github-release  https://github.com/jfut/nmcli-cli           yes      global(3d)
+prec                github-release  https://github.com/jfut/prec                yes      global(3d)
+sslcert-cli         github-release  https://github.com/jfut/sslcert-cli         yes      global(3d)
+```
 
-# Install and update the package through DNF.
-dnf install prec
-dnf update prec
+Show details for one AnyRepo repository:
 
-# Remove the repository definition and cached RPMs when no longer needed.
-dnf-anyrepo remove prec --purge-cache
+```bash
+# dnf-anyrepo show prec
+name: prec
+source: github-release
+owner: jfut
+repo: prec
+asset_regex: .*\.rpm$
+enabled: yes
+minimum_release_age: 3d
+cache_dir: /var/cache/dnf/anyrepo/prec
+latest_tag: v0.1.1
+latest_release_id: 340645091
+last_refresh_at: 2026-06-22T04:56:54Z
+cached_assets: prec-0.1.1-1.x86_64.rpm
+```
+
+AnyRepo repositories appear transparently in `dnf list`:
+
+New releases younger than `minimum_release_age` (`MIN_AGE`) are not shown.
+
+[`github.com:firehol:packages`](https://github.com/firehol/packages) falls back to `el9` automatically because no `el10` assets are published.
+
+```bash
+# dnf list | grep github.com
+firehol.noarch                                         3.1.7-1.el9                        github.com:firehol:packages
+iprange.x86_64                                         1.0.4-2.el9                        github.com:firehol:packages
+iprange-debugsource.x86_64                             1.0.4-2.el9                        github.com:firehol:packages
+ipset-fast-update.noarch                               1.6.0-1                            github.com:jfut:ipset-fast-update
+prec.x86_64                                            0.1.1-1                            github.com:jfut:prec
+```
+
+Change the global default setting:
+
+Repositories without their own `minimum_release_age` override inherit this value.
+
+```bash
+# dnf-anyrepo config set minimum_release_age 10h
+/etc/dnf/plugins/anyrepo.conf: [main] minimum_release_age: 3d -> 10h
+```
+
+Change `minimum_release_age` for individual repositories:
+
+```bash
+# dnf-anyrepo set nmcli-cli minimum_release_age 3h
+# dnf-anyrepo set sslcert-cli minimum_release_age 5h
+```
+
+Refresh the local cache explicitly:
+
+```bash
+# dnf-anyrepo refresh prec
+```
+
+List repositories again after the `MIN_AGE` overrides are applied:
+
+```bash
+# dnf-anyrepo list
+NAME                SOURCE          URL                                         ENABLED  MIN_AGE
+dnf-plugin-anyrepo  github-release  https://github.com/jfut/dnf-plugin-anyrepo  yes      global(10h)
+firehol             github-release  https://github.com/firehol/packages         yes      global(10h)
+ipset-fast-update   github-release  https://github.com/jfut/ipset-fast-update   yes      global(10h)
+nmcli-cli           github-release  https://github.com/jfut/nmcli-cli           yes      3h
+prec                github-release  https://github.com/jfut/prec                yes      global(10h)
+sslcert-cli         github-release  https://github.com/jfut/sslcert-cli         yes      5h
+```
+
+Install packages through ordinary `dnf install`:
+
+When AnyRepo-managed RPMs are unsigned and `gpgcheck = 0`, AnyRepo prints a `WARNING` before DNF asks for transaction confirmation.
+The same warning flow applies to `dnf update`.
+
+```bash
+# dnf install prec
+
+WARNING: Continue installing unsigned AnyRepo packages?
+- prec
+
+Dependencies resolved.
+=========================================================================
+ Package    Architecture Version        Repository                  Size
+=========================================================================
+Installing:
+ prec       x86_64       0.1.1-1        github.com:jfut:prec       3.3 M
+
+Transaction Summary
+=========================================================================
+Install  1 Package
+
+Total size: 3.3 M
+Installed size: 3.3 M
+Is this ok [y/N]: y
+Downloading Packages:
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                 1/1
+  Installing       : prec-0.1.1-1.x86_64                             1/1
+  Running scriptlet: prec-0.1.1-1.x86_64                             1/1
+
+Installed:
+  prec-0.1.1-1.x86_64
+
+Complete!
+```
+
+Update packages through ordinary `dnf update`:
+
+```bash
+# dnf update prec
+# dnf update
+```
+
+Automatic updates through `dnf-automatic.timer` also pick up AnyRepo-managed packages transparently.
+
+Remove the AnyRepo repository entry:
+
+```bash
+# dnf-anyrepo remove prec
 /etc/dnf/plugins/anyrepo.conf: Removed [prec]
 ```
 
@@ -86,13 +215,11 @@ gpgcheck = 0
 
 Set `enabled = 0` in that file to disable all AnyRepo-managed repositories for DNF commands.
 
-The `gpgcheck` value in that file is also inherited by the dynamic
-`github.com:<owner>:<repo>` repositories created by the plugin:
+The `gpgcheck` value in that file is also inherited by the dynamic `github.com:<owner>:<repo>` repositories created by the plugin:
 
 - `gpgcheck = 0` keeps DNF signature checks disabled for AnyRepo packages
 - `gpgcheck = 1` enables normal DNF signature checks for AnyRepo packages
-- when `gpgcheck = 1`, unsigned RPMs are rejected by DNF instead of using the
-  AnyRepo unsigned-package warning flow
+- when `gpgcheck = 1`, unsigned RPMs are rejected by DNF instead of using the AnyRepo unsigned-package warning flow
 
 When enabled, the plugin:
 
@@ -196,7 +323,7 @@ Architecture behavior:
 
 Release version behavior:
 
-- If `releasever` is unset, the plugin tries to detect `el8`, `el9`, or `el10`
+- If `releasever` is unset, the plugin tries to detect the current RHEL-compatible major version, such as `el8`, `el9`, or `el10`
 - When assets contain EL-specific variants such as `.el9.x86_64.rpm`, the plugin keeps the exact `releasever` when available
 - If the exact EL variant is missing, the plugin falls back to the nearest lower major such as `el10 -> el9 -> el8`
 - Assets without an EL marker remain eligible
@@ -244,11 +371,9 @@ dnf-anyrepo config set minimum_release_age 1d
 dnf-anyrepo set NAME minimum_release_age 30m
 ```
 
-The first command updates `[main]` and affects repositories that inherit the
-global setting.
+The first command updates `[main]` and affects repositories that inherit the global setting.
 
-The second command updates the named repository section and overrides the
-global value only for that repository.
+The second command updates the named repository section and overrides the global value only for that repository.
 
 ## How it works
 
@@ -283,7 +408,7 @@ Add repositories:
 ```bash
 # basic
 dnf-anyrepo add https://github.com/jfut/prec
-dnf-anyrepo add https://github.com/jfut/sslcert-cli --name sslcert
+dnf-anyrepo add https://github.com/firehol/packages --name firehol
 
 # with options
 dnf-anyrepo add https://github.com/jfut/prec --asset-regex '.*\.rpm$'
@@ -301,7 +426,6 @@ Global configuration:
 dnf-anyrepo config get minimum_release_age
 dnf-anyrepo config set minimum_release_age 1h
 dnf-anyrepo config unset minimum_release_age
-/etc/dnf/plugins/anyrepo.conf: Unset [main] minimum_release_age
 ```
 
 Update repository settings:
@@ -309,11 +433,9 @@ Update repository settings:
 ```bash
 dnf-anyrepo show prec
 
-dnf-anyrepo set prec minimum_release_age 30m
-dnf-anyrepo set sslcert minimum_release_age 3d
+dnf-anyrepo set prec minimum_release_age 1d
 dnf-anyrepo set prec enabled false
 dnf-anyrepo unset prec minimum_release_age
-/etc/dnf/plugins/anyrepo.conf: Unset [prec] minimum_release_age
 ```
 
 Refresh and remove repositories:
@@ -351,3 +473,9 @@ The codebase targets Python 3.6-compatible syntax.
 ## License
 
 Apache-2.0
+
+Copyright contributors to the dnf-plugin-anyrepo project.
+
+## Author
+
+Jun Futagawa (jfut)
