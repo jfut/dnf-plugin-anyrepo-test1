@@ -57,6 +57,9 @@ nfpms:
     section: utils
     formats:
       - rpm
+    rpm:
+      signature:
+        key_file: '{{ with index .Env "GPG_KEY_PATH" }}{{ . }}{{ end }}'
     release: 1
     dependencies:
       - python3
@@ -122,6 +125,9 @@ nfpms:
     section: utils
     formats:
       - rpm
+    rpm:
+      signature:
+        key_file: '{{ with index .Env "GPG_KEY_PATH" }}{{ . }}{{ end }}'
     release: 1
     dependencies:
       - python3
@@ -187,6 +193,9 @@ nfpms:
     section: utils
     formats:
       - rpm
+    rpm:
+      signature:
+        key_file: '{{ with index .Env "GPG_KEY_PATH" }}{{ . }}{{ end }}'
     release: 1
     dependencies:
       - python3
