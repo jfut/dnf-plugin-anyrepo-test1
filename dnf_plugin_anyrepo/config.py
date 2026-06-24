@@ -37,6 +37,7 @@ REPO_CONFIG_KEYS = {
     "arch",
     "releasever",
     "github_token_file",
+    "gpgcheck",
 }
 
 _DURATION_RE = re.compile(r"^\s*(\d+)\s*([smhd]?)\s*$")
@@ -74,6 +75,7 @@ class RepoConfig:
         arch=None,
         releasever=None,
         github_token_file=None,
+        gpgcheck=None,
     ):
         self.name = name
         self.source = source
@@ -86,6 +88,7 @@ class RepoConfig:
         self.arch = arch
         self.releasever = releasever
         self.github_token_file = github_token_file
+        self.gpgcheck = gpgcheck
 
     @property
     def cache_path(self):
@@ -128,6 +131,8 @@ def validate_repo_value(section: str, key: str, value: object) -> None:
     elif key == "asset_regex":
         validate_asset_regex(str(value), section)
     elif key == "enabled":
+        parse_bool(value)
+    elif key == "gpgcheck":
         parse_bool(value)
     elif key == "minimum_release_age":
         parse_duration(value)
@@ -316,6 +321,7 @@ def load_config(path: str = DEFAULT_CONFIG_PATH) -> PluginConfig:
         )
         cache_dir = item.get("cache_dir", main.cache_dir)
         refresh_interval = parse_duration(item.get("refresh_interval", main.refresh_interval))
+        gpgcheck = parse_bool(item["gpgcheck"]) if "gpgcheck" in item else None
         repos[section] = RepoConfig(
             name=section,
             source=source,
@@ -328,6 +334,7 @@ def load_config(path: str = DEFAULT_CONFIG_PATH) -> PluginConfig:
             arch=item.get("arch") or current_arch(),
             releasever=item.get("releasever") or current_releasever(),
             github_token_file=item.get("github_token_file"),
+            gpgcheck=gpgcheck,
         )
     return PluginConfig(path=path, main=main, repos=repos)
 

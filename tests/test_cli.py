@@ -190,6 +190,7 @@ class CliTest(unittest.TestCase):
                         "cache_dir: global(/tmp/anyrepo-cache)",
                         "enabled: true",
                         "github_token_file:",
+                        "gpgcheck: global(0)",
                         "minimum_release_age: global(2d)",
                         "refresh_interval: global(1h)",
                         "releasever: el9",
@@ -218,6 +219,31 @@ class CliTest(unittest.TestCase):
                 stdout.getvalue().strip(),
                 f"{path}: [nmcli-cli] minimum_release_age: global(3d) -> 1h",
             )
+
+    def test_set_gpgcheck_prints_inherited_before_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("[prec]\nurl = https://github.com/jfut/prec\n")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = main(["--config", path, "repo", "prec", "set", "gpgcheck", "0"])
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                stdout.getvalue().strip(),
+                f"{path}: [prec] gpgcheck: global(0) -> 0",
+            )
+
+    def test_repo_show_prints_repository_gpgcheck_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("[prec]\nurl = https://github.com/jfut/prec\ngpgcheck = 1\n")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = main(["--config", path, "repo", "prec"])
+            self.assertEqual(result, 0)
+            self.assertIn("gpgcheck: 1\n", stdout.getvalue())
 
     def test_set_missing_repo_returns_error(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -228,6 +228,14 @@ The `gpgcheck` value in that file is also inherited by the dynamic `github.com:<
 - `gpgcheck = 1` enables normal DNF signature checks for AnyRepo packages
 - when `gpgcheck = 1`, unsigned RPMs are rejected by DNF instead of using the AnyRepo unsigned-package warning flow
 
+You can override the inherited value for one configured repository:
+
+```bash
+dnf-anyrepo repo NAME set gpgcheck 0
+dnf-anyrepo repo NAME set gpgcheck 1
+dnf-anyrepo repo NAME unset gpgcheck
+```
+
 When enabled, the plugin:
 
 - disables the static `anyrepo` repo entry itself
@@ -299,6 +307,7 @@ Per-repository sections support these keys:
 - `url`
 - `asset_regex`
 - `enabled`
+- `gpgcheck`
 - `minimum_release_age`
 - `cache_dir`
 - `refresh_interval`
@@ -382,6 +391,12 @@ dnf-anyrepo repo NAME set minimum_release_age 30m
 
 # Remove the repository-specific override.
 dnf-anyrepo repo NAME unset minimum_release_age
+
+# Override the inherited gpgcheck value for one repository.
+dnf-anyrepo repo NAME set gpgcheck 1
+
+# Inherit gpgcheck from /etc/yum.repos.d/anyrepo.repo again.
+dnf-anyrepo repo NAME unset gpgcheck
 ```
 
 The `global` commands update `[main]` and affect repositories that inherit the global setting.
@@ -448,6 +463,7 @@ Update repository settings:
 dnf-anyrepo repo prec
 dnf-anyrepo repo prec set minimum_release_age 1d
 dnf-anyrepo repo prec set enabled false
+dnf-anyrepo repo prec set gpgcheck 1
 dnf-anyrepo repo prec unset minimum_release_age
 ```
 

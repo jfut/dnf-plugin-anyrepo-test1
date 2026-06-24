@@ -12,6 +12,7 @@ from dnf_plugin_anyrepo.dnf_plugin import (
     AnyRepoPlugin,
     anyrepo_cache_dirs,
     clear_anyrepo_cache_dirs,
+    effective_repo_gpgcheck,
     github_repo_id,
     repo_switch_enabled,
     repo_switch_gpgcheck,
@@ -68,6 +69,33 @@ class DnfPluginTest(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("[anyrepo]\ngpgcheck = 1\n")
             self.assertTrue(repo_switch_gpgcheck(path))
+
+    def test_effective_repo_gpgcheck_inherits_when_unset(self):
+        repo = RepoConfig(
+            name="prec",
+            source="github-release",
+            url="https://github.com/jfut/prec",
+            asset_regex=r".*\.rpm$",
+            enabled=True,
+            minimum_release_age=0,
+            cache_dir="/tmp",
+            refresh_interval=600,
+        )
+        self.assertTrue(effective_repo_gpgcheck(repo, True))
+
+    def test_effective_repo_gpgcheck_prefers_repo_value(self):
+        repo = RepoConfig(
+            name="prec",
+            source="github-release",
+            url="https://github.com/jfut/prec",
+            asset_regex=r".*\.rpm$",
+            enabled=True,
+            minimum_release_age=0,
+            cache_dir="/tmp",
+            refresh_interval=600,
+            gpgcheck=False,
+        )
+        self.assertFalse(effective_repo_gpgcheck(repo, True))
 
     def test_anyrepo_cache_dirs_collects_main_and_repo_cache_dirs(self):
         with tempfile.TemporaryDirectory() as tmp:

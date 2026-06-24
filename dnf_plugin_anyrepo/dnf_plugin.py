@@ -61,6 +61,14 @@ def repo_switch_gpgcheck(path=REPO_SWITCH_PATH):
     return parse_bool(parser[REPO_SWITCH_ID].get("gpgcheck", "0"))
 
 
+def effective_repo_gpgcheck(repo, inherited_gpgcheck: bool) -> bool:
+    """Prefer repository-specific gpgcheck when it is explicitly configured."""
+
+    if repo.gpgcheck is None:
+        return inherited_gpgcheck
+    return repo.gpgcheck
+
+
 def anyrepo_cache_dirs(config_path: str = DEFAULT_CONFIG_PATH):
     """Collect every configured AnyRepo cache root for clean-all integration."""
 
@@ -173,7 +181,10 @@ if dnf is not None:
             dnf_repo.enabled = True
             dnf_repo.skip_if_unavailable = True
             dnf_repo.metadata_expire = 0
-            dnf_repo.gpgcheck = getattr(self, "_anyrepo_gpgcheck", False)
+            dnf_repo.gpgcheck = effective_repo_gpgcheck(
+                repo,
+                getattr(self, "_anyrepo_gpgcheck", False),
+            )
             dnf_repo.repo_gpgcheck = False
 
         def resolved(self):
