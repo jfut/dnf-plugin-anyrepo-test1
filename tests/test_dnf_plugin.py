@@ -169,6 +169,7 @@ class DnfPluginTest(unittest.TestCase):
             "failed to load AnyRepo configuration: unknown main key: typo"
         )
         self.assertEqual(plugin._anyrepo_repo_ids, set())
+        self.assertEqual(plugin._anyrepo_repo_names, {})
 
     @unittest.skipIf(dnf is None, "dnf is not available")
     def test_added_repo_inherits_gpgcheck_setting(self):
@@ -204,9 +205,9 @@ class DnfPluginTest(unittest.TestCase):
 
         self.assertEqual(
             stderr.getvalue(),
-            "\nWARNING: Continue installing unsigned AnyRepo packages?\n"
-            "- prec\n"
-            "Proceeding because -y was specified.\n\n",
+            "\nWARNING: To continue installing unsigned AnyRepo packages, "
+            "configure the following:\n"
+            "- dnf-anyrepo repo prec set gpgcheck 0\n\n",
         )
 
     @unittest.skipIf(dnf is None, "dnf is not available")
@@ -224,9 +225,29 @@ class DnfPluginTest(unittest.TestCase):
 
         self.assertEqual(
             stderr.getvalue(),
-            "\nWARNING: Continue installing unsigned AnyRepo packages?\n"
-            "- prec\n"
-            "- sslcert-cli\n\n",
+            "\nWARNING: To continue installing unsigned AnyRepo packages, "
+            "configure the following:\n"
+            "- dnf-anyrepo repo prec set gpgcheck 0\n"
+            "- dnf-anyrepo repo sslcert-cli set gpgcheck 0\n\n",
+        )
+
+    @unittest.skipIf(dnf is None, "dnf is not available")
+    def test_warn_unsigned_packages_uses_repo_aliases(self):
+        base = dnf.Base()
+        plugin = AnyRepoPlugin(base, None)
+        plugin._anyrepo_repo_names = {"github.com:jfut:nmcli-cli": "nmcli"}
+        pkg = mock.Mock()
+        pkg.name = "nmcli-cli"
+        pkg.repoid = "github.com:jfut:nmcli-cli"
+
+        with mock.patch("sys.stderr", new=StringIO()) as stderr:
+            plugin._warn_unsigned_packages([pkg])
+
+        self.assertEqual(
+            stderr.getvalue(),
+            "\nWARNING: To continue installing unsigned AnyRepo packages, "
+            "configure the following:\n"
+            "- dnf-anyrepo repo nmcli set gpgcheck 0\n\n",
         )
 
 

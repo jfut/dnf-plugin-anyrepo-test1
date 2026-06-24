@@ -6,6 +6,7 @@ import io
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from dnf_plugin_anyrepo.cli import main
 
@@ -160,6 +161,40 @@ class CliTest(unittest.TestCase):
             self.assertEqual(
                 stdout.getvalue().strip(),
                 f"{path}: Unset [main] minimum_release_age",
+            )
+
+    def test_list_prints_gpgcheck_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "[main]\n"
+                    "minimum_release_age = 3d\n"
+                    "\n"
+                    "[nmcli-cli]\n"
+                    "url = https://github.com/jfut/nmcli-cli\n"
+                    "gpgcheck = 0\n"
+                    "\n"
+                    "[prec]\n"
+                    "url = https://github.com/jfut/prec\n"
+                )
+            stdout = io.StringIO()
+            with mock.patch("dnf_plugin_anyrepo.cli.repo_switch_gpgcheck", return_value=True):
+                with contextlib.redirect_stdout(stdout):
+                    result = main(["--config", path, "list"])
+            self.assertEqual(result, 0)
+            lines = stdout.getvalue().splitlines()
+            self.assertEqual(
+                lines[0].split(),
+                ["NAME", "SOURCE", "URL", "ENABLED", "GPGCHECK", "MIN_AGE"],
+            )
+            self.assertIn(
+                "nmcli-cli github-release https://github.com/jfut/nmcli-cli yes 0 global(3d)",
+                " ".join(lines[1].split()),
+            )
+            self.assertIn(
+                "prec github-release https://github.com/jfut/prec yes global(1) global(3d)",
+                " ".join(lines[2].split()),
             )
 
     def test_repo_show_prints_repository_details(self):

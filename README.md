@@ -54,7 +54,7 @@ If the RPM public signing key is available, import it first:
 
 Register GitHub repositories that publish RPM assets:
 
-Use `-n` or `--name` to register a repository under an alias instead of the repository name.
+The following release RPMs are signed with the same RPM public key as `dnf-plugin-anyrepo`.
 
 ```bash
 # dnf-anyrepo add https://github.com/jfut/dnf-plugin-anyrepo
@@ -62,20 +62,28 @@ Use `-n` or `--name` to register a repository under an alias instead of the repo
 # dnf-anyrepo add https://github.com/jfut/sslcert-cli
 # dnf-anyrepo add https://github.com/jfut/nmcli-cli
 # dnf-anyrepo add https://github.com/jfut/ipset-fast-update
+```
+
+Use `-n` or `--name` to register a repository under an alias instead of the repository name.
+
+The following release RPMs are unsigned, so gpgcheck must be disabled.
+
+```bash
 # dnf-anyrepo add https://github.com/firehol/packages -n firehol
+# dnf-anyrepo repo firehol set gpgcheck 0
 ```
 
 List repositories managed by AnyRepo:
 
 ```bash
 # dnf-anyrepo list
-NAME                SOURCE          URL                                         ENABLED  MIN_AGE
-dnf-plugin-anyrepo  github-release  https://github.com/jfut/dnf-plugin-anyrepo  yes      global(3d)
-firehol             github-release  https://github.com/firehol/packages         yes      global(3d)
-ipset-fast-update   github-release  https://github.com/jfut/ipset-fast-update   yes      global(3d)
-nmcli-cli           github-release  https://github.com/jfut/nmcli-cli           yes      global(3d)
-prec                github-release  https://github.com/jfut/prec                yes      global(3d)
-sslcert-cli         github-release  https://github.com/jfut/sslcert-cli         yes      global(3d)
+NAME                SOURCE          URL                                         ENABLED  GPGCHECK   MIN_AGE
+dnf-plugin-anyrepo  github-release  https://github.com/jfut/dnf-plugin-anyrepo  yes      global(1)  global(3d)
+firehol             github-release  https://github.com/firehol/packages         yes      0          global(3d)
+ipset-fast-update   github-release  https://github.com/jfut/ipset-fast-update   yes      global(1)  global(3d)
+nmcli-cli           github-release  https://github.com/jfut/nmcli-cli           yes      global(1)  global(3d)
+prec                github-release  https://github.com/jfut/prec                yes      global(1)  global(3d)
+sslcert-cli         github-release  https://github.com/jfut/sslcert-cli         yes      global(1)  global(3d)
 ```
 
 Show details for one AnyRepo repository:
@@ -89,7 +97,7 @@ enabled: true
 github_token_file:
 minimum_release_age: global(3d)
 refresh_interval: global(10m)
-releasever: el9
+releasever: el10
 source: github-release
 url: https://github.com/jfut/prec
 ```
@@ -135,25 +143,24 @@ List repositories again after the `MIN_AGE` overrides are applied:
 
 ```bash
 # dnf-anyrepo list
-NAME                SOURCE          URL                                         ENABLED  MIN_AGE
-dnf-plugin-anyrepo  github-release  https://github.com/jfut/dnf-plugin-anyrepo  yes      global(10h)
-firehol             github-release  https://github.com/firehol/packages         yes      global(10h)
-ipset-fast-update   github-release  https://github.com/jfut/ipset-fast-update   yes      global(10h)
-nmcli-cli           github-release  https://github.com/jfut/nmcli-cli           yes      3h
-prec                github-release  https://github.com/jfut/prec                yes      global(10h)
-sslcert-cli         github-release  https://github.com/jfut/sslcert-cli         yes      5h
+NAME                SOURCE          URL                                         ENABLED  GPGCHECK   MIN_AGE
+dnf-plugin-anyrepo  github-release  https://github.com/jfut/dnf-plugin-anyrepo  yes      global(1)  global(10h)
+firehol             github-release  https://github.com/firehol/packages         yes      global(1)  global(10h)
+ipset-fast-update   github-release  https://github.com/jfut/ipset-fast-update   yes      global(1)  global(10h)
+nmcli-cli           github-release  https://github.com/jfut/nmcli-cli           yes      global(1)  3h
+prec                github-release  https://github.com/jfut/prec                yes      global(1)  global(10h)
+sslcert-cli         github-release  https://github.com/jfut/sslcert-cli         yes      global(1)  5h
 ```
 
 Install packages through ordinary `dnf install`:
 
-When AnyRepo-managed RPMs are unsigned and `gpgcheck = 0`, AnyRepo prints a `WARNING` before DNF asks for transaction confirmation.
-The same warning flow applies to `dnf upgrade`.
+When AnyRepo-managed RPMs are unsigned and `gpgcheck = 1`, DNF rejects them. AnyRepo prints the repository-specific setting required to allow unsigned packages. The same warning flow applies to `dnf upgrade`.
 
 ```bash
 # dnf install prec
 
-WARNING: Continue installing unsigned AnyRepo packages?
-- prec
+WARNING: To continue installing unsigned AnyRepo packages, configure the following:
+- dnf-anyrepo repo prec set gpgcheck 0
 
 Dependencies resolved.
 =========================================================================
@@ -217,7 +224,7 @@ name = AnyRepo repositories
 enabled = 1
 baseurl = file:///var/empty
 skip_if_unavailable = 1
-gpgcheck = 0
+gpgcheck = 1
 ```
 
 Set `enabled = 0` in that file to disable all AnyRepo-managed repositories for DNF commands.
@@ -226,7 +233,7 @@ The `gpgcheck` value in that file is also inherited by the dynamic `github.com:<
 
 - `gpgcheck = 0` keeps DNF signature checks disabled for AnyRepo packages
 - `gpgcheck = 1` enables normal DNF signature checks for AnyRepo packages
-- when `gpgcheck = 1`, unsigned RPMs are rejected by DNF instead of using the AnyRepo unsigned-package warning flow
+- when `gpgcheck = 1`, unsigned RPMs require a repository-specific override before install or upgrade can continue
 
 You can override the inherited value for one configured repository:
 
@@ -441,7 +448,7 @@ dnf-anyrepo add https://github.com/firehol/packages -n firehol
 # with options
 dnf-anyrepo add https://github.com/jfut/prec --asset-regex '.*\.rpm$'
 dnf-anyrepo add https://github.com/jfut/prec --minimum-release-age 30m
-dnf-anyrepo add https://github.com/jfut/prec --arch x86_64 --releasever el9
+dnf-anyrepo add https://github.com/jfut/prec --arch x86_64 --releasever el10
 dnf-anyrepo add https://github.com/jfut/prec --github-token-file /etc/anyrepo/github.token
 
 # list

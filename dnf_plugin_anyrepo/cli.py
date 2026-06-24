@@ -220,7 +220,7 @@ def _format_cli_error(args: argparse.Namespace, exc: Exception) -> str:
 
 
 def _print_list(config) -> None:
-    rows = [["NAME", "SOURCE", "URL", "ENABLED", "MIN_AGE"]]
+    rows = [["NAME", "SOURCE", "URL", "ENABLED", "GPGCHECK", "MIN_AGE"]]
     for repo in iter_repo_rows(config):
         inherited = "minimum_release_age" not in _section_options(config.path, repo.name)
         rows.append(
@@ -229,6 +229,7 @@ def _print_list(config) -> None:
                 repo.source,
                 repo.url,
                 "yes" if repo.enabled else "no",
+                _format_repo_config_value(config, repo, "gpgcheck"),
                 format_duration(repo.minimum_release_age, inherited=inherited),
             ]
         )

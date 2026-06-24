@@ -51,7 +51,15 @@ test-e2e: snapshot
     #!/usr/bin/env bash
     set -euo pipefail
     tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
+    key_pkg="gpg-pubkey-40ba9f95-6a3a4077"
+    key_imported=0
+    cleanup() {
+        if [ "$key_imported" = "1" ]; then
+            sudo rpm -e "$key_pkg" || true
+        fi
+        rm -rf "$tmp"
+    }
+    trap cleanup EXIT
     mkdir -p "$tmp/repos.d"
     dnf_opts=(--setopt="reposdir=$tmp/repos.d")
     . /etc/os-release
@@ -64,6 +72,10 @@ test-e2e: snapshot
 
     sudo dnf "${dnf_opts[@]}" --noplugins remove -y dnf-plugin-anyrepo || true
     sudo dnf "${dnf_opts[@]}" --noplugins install -y $rpm_path
+    if ! rpm -q "$key_pkg" >/dev/null 2>&1; then
+        sudo rpm --import packaging/RPM-GPG-KEY-jfut-github
+        key_imported=1
+    fi
     sudo dnf-anyrepo add https://github.com/jfut/prec --minimum-release-age 0 --force
     sudo dnf-anyrepo list
     sudo dnf "${dnf_opts[@]}" list prec | tee "$tmp/dnf-list.txt"
@@ -81,6 +93,10 @@ test-e2e: snapshot
     fi
     sudo dnf "${dnf_opts[@]}" install -y prec
     sudo dnf "${dnf_opts[@]}" remove -y prec
+    if [ "$key_imported" = "1" ]; then
+        sudo rpm -e "$key_pkg"
+        key_imported=0
+    fi
     sudo dnf-anyrepo remove prec --purge-cache
     sudo dnf "${dnf_opts[@]}" --noplugins remove -y dnf-plugin-anyrepo
     sudo rm -f /etc/dnf/plugins/anyrepo.conf.rpmsave /etc/yum.repos.d/anyrepo.repo.rpmsave
