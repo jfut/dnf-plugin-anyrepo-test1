@@ -21,6 +21,7 @@ from dnf_plugin_anyrepo.config import (
     unset_value,
     validate_repo_name,
 )
+from dnf_plugin_anyrepo.dnf_plugin import repo_switch_gpgcheck
 from dnf_plugin_anyrepo.manager import RepositoryManager
 
 
@@ -219,7 +220,7 @@ def _format_cli_error(args: argparse.Namespace, exc: Exception) -> str:
 
 
 def _print_list(config) -> None:
-    rows = [["NAME", "SOURCE", "URL", "ENABLED", "MIN_AGE"]]
+    rows = [["NAME", "SOURCE", "URL", "ENABLED", "GPGCHECK", "MIN_AGE"]]
     for repo in iter_repo_rows(config):
         inherited = "minimum_release_age" not in _section_options(config.path, repo.name)
         rows.append(
@@ -228,6 +229,7 @@ def _print_list(config) -> None:
                 repo.source,
                 repo.url,
                 "yes" if repo.enabled else "no",
+                _format_repo_config_value(config, repo, "gpgcheck"),
                 format_duration(repo.minimum_release_age, inherited=inherited),
             ]
         )
@@ -254,6 +256,7 @@ def _print_repo_show(config, repo) -> None:
         "cache_dir": _format_repo_config_value(config, repo, "cache_dir"),
         "enabled": _format_repo_config_value(config, repo, "enabled"),
         "github_token_file": _format_repo_config_value(config, repo, "github_token_file"),
+        "gpgcheck": _format_repo_config_value(config, repo, "gpgcheck"),
         "minimum_release_age": _format_repo_config_value(config, repo, "minimum_release_age"),
         "refresh_interval": _format_repo_config_value(config, repo, "refresh_interval"),
         "releasever": _format_repo_config_value(config, repo, "releasever"),
@@ -274,6 +277,8 @@ def _print_key_value(key: str, value: str) -> None:
 
 def _format_repo_config_value(config, repo, key: str) -> str:
     value = getattr(repo, key)
+    if key == "gpgcheck" and key not in _section_options(config.path, repo.name):
+        return _format_inherited_gpgcheck()
     inherited_global_keys = {"cache_dir", "refresh_interval", "minimum_release_age"}
     if key in inherited_global_keys and key not in _section_options(config.path, repo.name):
         return f"global({_format_display_value(key, value)})"
@@ -306,6 +311,8 @@ def _describe_current_value(path: str, section: str, key: str) -> str:
         return "(unset)"
 
     inherited = key not in _section_options(path, section)
+    if key == "gpgcheck" and inherited:
+        return _format_inherited_gpgcheck()
     return _format_display_value(key, getattr(repo, key), inherited=inherited)
 
 
@@ -314,9 +321,16 @@ def _format_display_value(key: str, value, inherited: bool = False) -> str:
         return ""
     if key in {"minimum_release_age", "refresh_interval"}:
         return format_duration(value, inherited=inherited)
+    if key == "gpgcheck":
+        return "1" if value else "0"
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
+
+
+def _format_inherited_gpgcheck() -> str:
+    # gpgcheck is inherited from the user-facing anyrepo.repo DNF switch.
+    return f"global({1 if repo_switch_gpgcheck() else 0})"
 
 
 if __name__ == "__main__":

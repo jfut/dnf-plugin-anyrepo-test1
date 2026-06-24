@@ -61,6 +61,14 @@ def repo_switch_gpgcheck(path=REPO_SWITCH_PATH):
     return parse_bool(parser[REPO_SWITCH_ID].get("gpgcheck", "0"))
 
 
+def effective_repo_gpgcheck(repo, inherited_gpgcheck: bool) -> bool:
+    """Prefer repository-specific gpgcheck when it is explicitly configured."""
+
+    if repo.gpgcheck is None:
+        return inherited_gpgcheck
+    return repo.gpgcheck
+
+
 def anyrepo_cache_dirs(config_path: str = DEFAULT_CONFIG_PATH):
     """Collect every configured AnyRepo cache root for clean-all integration."""
 
@@ -134,10 +142,14 @@ if dnf is not None:
             except (ConfigError, OSError, configparser.Error) as exc:
                 self._anyrepo_debug = False
                 self._anyrepo_repo_ids = set()
+                self._anyrepo_repo_names = {}
                 self._warn(f"failed to load AnyRepo configuration: {exc}")
                 return
             self._anyrepo_debug = manager.config.main.debug
-            self._anyrepo_repo_ids = {github_repo_id(repo) for repo in manager.enabled_repos()}
+            self._anyrepo_repo_names = {
+                github_repo_id(repo): repo.name for repo in manager.enabled_repos()
+            }
+            self._anyrepo_repo_ids = set(self._anyrepo_repo_names)
             try:
                 enabled = repo_switch_enabled()
                 self._anyrepo_gpgcheck = repo_switch_gpgcheck()
@@ -173,7 +185,10 @@ if dnf is not None:
             dnf_repo.enabled = True
             dnf_repo.skip_if_unavailable = True
             dnf_repo.metadata_expire = 0
-            dnf_repo.gpgcheck = getattr(self, "_anyrepo_gpgcheck", False)
+            dnf_repo.gpgcheck = effective_repo_gpgcheck(
+                repo,
+                getattr(self, "_anyrepo_gpgcheck", False),
+            )
             dnf_repo.repo_gpgcheck = False
 
         def resolved(self):
@@ -236,11 +251,21 @@ if dnf is not None:
             return False
 
         def _warn_unsigned_packages(self, packages):
-            names = sorted(pkg.name for pkg in packages)
-            lines = ["", "WARNING: Continue installing unsigned AnyRepo packages?"]
-            lines.extend(f"- {name}" for name in names)
-            if self.base.conf.assumeyes:
-                lines.append("Proceeding because -y was specified.")
+            names = sorted(
+                {
+                    getattr(self, "_anyrepo_repo_names", {}).get(
+                        getattr(pkg, "repoid", ""),
+                        pkg.name,
+                    )
+                    for pkg in packages
+                }
+            )
+            lines = [
+                "",
+                "WARNING: To continue installing unsigned AnyRepo packages, "
+                "configure the following:",
+            ]
+            lines.extend(f"- dnf-anyrepo repo {name} set gpgcheck 0" for name in names)
             lines.append("")
             self._print_unsigned_warning_block(lines)
 

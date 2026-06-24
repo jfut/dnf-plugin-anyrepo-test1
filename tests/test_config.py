@@ -44,7 +44,16 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(config.repos["prec"].minimum_release_age, 3600)
             self.assertEqual(config.repos["prec"].source, "github-release")
             self.assertTrue(config.repos["prec"].enabled)
+            self.assertIsNone(config.repos["prec"].gpgcheck)
             self.assertFalse(config.main.debug)
+
+    def test_load_repo_reads_gpgcheck(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "anyrepo.conf")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("[prec]\nurl = https://github.com/jfut/prec\ngpgcheck = 1\n")
+            config = load_config(path)
+            self.assertTrue(config.repos["prec"].gpgcheck)
 
     def test_load_main_debug(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,6 +131,8 @@ class ConfigTest(unittest.TestCase):
                 set_value(path, "prec", "source", "bad")
             with self.assertRaises(ConfigError):
                 set_value(path, "prec", "enabled", "maybe")
+            with self.assertRaises(ConfigError):
+                set_value(path, "prec", "gpgcheck", "maybe")
             with self.assertRaises(ConfigError):
                 set_value(path, "prec", "refresh_interval", "soon")
             with self.assertRaises(ConfigError):

@@ -12,6 +12,7 @@ from dnf_plugin_anyrepo.dnf_plugin import (
     AnyRepoPlugin,
     anyrepo_cache_dirs,
     clear_anyrepo_cache_dirs,
+    effective_repo_gpgcheck,
     github_repo_id,
     repo_switch_enabled,
     repo_switch_gpgcheck,
@@ -68,6 +69,33 @@ class DnfPluginTest(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("[anyrepo]\ngpgcheck = 1\n")
             self.assertTrue(repo_switch_gpgcheck(path))
+
+    def test_effective_repo_gpgcheck_inherits_when_unset(self):
+        repo = RepoConfig(
+            name="prec",
+            source="github-release",
+            url="https://github.com/jfut/prec",
+            asset_regex=r".*\.rpm$",
+            enabled=True,
+            minimum_release_age=0,
+            cache_dir="/tmp",
+            refresh_interval=600,
+        )
+        self.assertTrue(effective_repo_gpgcheck(repo, True))
+
+    def test_effective_repo_gpgcheck_prefers_repo_value(self):
+        repo = RepoConfig(
+            name="prec",
+            source="github-release",
+            url="https://github.com/jfut/prec",
+            asset_regex=r".*\.rpm$",
+            enabled=True,
+            minimum_release_age=0,
+            cache_dir="/tmp",
+            refresh_interval=600,
+            gpgcheck=False,
+        )
+        self.assertFalse(effective_repo_gpgcheck(repo, True))
 
     def test_anyrepo_cache_dirs_collects_main_and_repo_cache_dirs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -141,6 +169,7 @@ class DnfPluginTest(unittest.TestCase):
             "failed to load AnyRepo configuration: unknown main key: typo"
         )
         self.assertEqual(plugin._anyrepo_repo_ids, set())
+        self.assertEqual(plugin._anyrepo_repo_names, {})
 
     @unittest.skipIf(dnf is None, "dnf is not available")
     def test_added_repo_inherits_gpgcheck_setting(self):
@@ -176,9 +205,9 @@ class DnfPluginTest(unittest.TestCase):
 
         self.assertEqual(
             stderr.getvalue(),
-            "\nWARNING: Continue installing unsigned AnyRepo packages?\n"
-            "- prec\n"
-            "Proceeding because -y was specified.\n\n",
+            "\nWARNING: To continue installing unsigned AnyRepo packages, "
+            "configure the following:\n"
+            "- dnf-anyrepo repo prec set gpgcheck 0\n\n",
         )
 
     @unittest.skipIf(dnf is None, "dnf is not available")
@@ -196,9 +225,29 @@ class DnfPluginTest(unittest.TestCase):
 
         self.assertEqual(
             stderr.getvalue(),
-            "\nWARNING: Continue installing unsigned AnyRepo packages?\n"
-            "- prec\n"
-            "- sslcert-cli\n\n",
+            "\nWARNING: To continue installing unsigned AnyRepo packages, "
+            "configure the following:\n"
+            "- dnf-anyrepo repo prec set gpgcheck 0\n"
+            "- dnf-anyrepo repo sslcert-cli set gpgcheck 0\n\n",
+        )
+
+    @unittest.skipIf(dnf is None, "dnf is not available")
+    def test_warn_unsigned_packages_uses_repo_aliases(self):
+        base = dnf.Base()
+        plugin = AnyRepoPlugin(base, None)
+        plugin._anyrepo_repo_names = {"github.com:jfut:nmcli-cli": "nmcli"}
+        pkg = mock.Mock()
+        pkg.name = "nmcli-cli"
+        pkg.repoid = "github.com:jfut:nmcli-cli"
+
+        with mock.patch("sys.stderr", new=StringIO()) as stderr:
+            plugin._warn_unsigned_packages([pkg])
+
+        self.assertEqual(
+            stderr.getvalue(),
+            "\nWARNING: To continue installing unsigned AnyRepo packages, "
+            "configure the following:\n"
+            "- dnf-anyrepo repo nmcli set gpgcheck 0\n\n",
         )
 
 
