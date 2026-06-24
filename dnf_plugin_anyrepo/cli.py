@@ -67,15 +67,13 @@ def build_parser() -> argparse.ArgumentParser:
     unset.add_argument("key")
 
     repo = sub.add_parser("repo")
+    repo.add_argument("name")
     repo_sub = repo.add_subparsers(dest="repo_command")
-    repo_show = repo_sub.add_parser("show")
-    repo_show.add_argument("name")
+    repo_sub.add_parser("show")
     repo_set = repo_sub.add_parser("set")
-    repo_set.add_argument("name")
     repo_set.add_argument("key")
     repo_set.add_argument("value")
     repo_unset = repo_sub.add_parser("unset")
-    repo_unset.add_argument("name")
     repo_unset.add_argument("key")
     return parser
 

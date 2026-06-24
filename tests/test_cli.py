@@ -67,7 +67,7 @@ class CliTest(unittest.TestCase):
                 )
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                result = main(["--config", path, "repo", "unset", SSL_CERT_REPO, "minimum_release_age"])
+                result = main(["--config", path, "repo", SSL_CERT_REPO, "unset", "minimum_release_age"])
             self.assertEqual(result, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
@@ -95,7 +95,7 @@ class CliTest(unittest.TestCase):
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                result = main(["--config", path, "repo", "set", "sslcert", "minimum_release_age", "3d"])
+                result = main(["--config", path, "repo", "sslcert", "set", "minimum_release_age", "3d"])
             self.assertEqual(result, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
@@ -175,7 +175,7 @@ class CliTest(unittest.TestCase):
                 )
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                result = main(["--config", path, "repo", "show", "prec"])
+                result = main(["--config", path, "repo", "prec", "show"])
             self.assertEqual(result, 0)
             output = stdout.getvalue()
             self.assertIn("name: prec\n", output)
@@ -196,7 +196,7 @@ class CliTest(unittest.TestCase):
                 )
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                result = main(["--config", path, "repo", "set", "nmcli-cli", "minimum_release_age", "1h"])
+                result = main(["--config", path, "repo", "nmcli-cli", "set", "minimum_release_age", "1h"])
             self.assertEqual(result, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
@@ -210,7 +210,7 @@ class CliTest(unittest.TestCase):
                 fh.write("[main]\n")
             stderr = io.StringIO()
             with contextlib.redirect_stderr(stderr):
-                result = main(["--config", path, "repo", "set", "missing", "minimum_release_age", "1h"])
+                result = main(["--config", path, "repo", "missing", "set", "minimum_release_age", "1h"])
             self.assertEqual(result, 1)
             self.assertEqual(
                 stderr.getvalue().strip(),
@@ -229,7 +229,7 @@ class CliTest(unittest.TestCase):
                 )
             stderr = io.StringIO()
             with contextlib.redirect_stderr(stderr):
-                result = main(["--config", path, "repo", "set", "nmcli-cli", "unknown_key", "3d"])
+                result = main(["--config", path, "repo", "nmcli-cli", "set", "unknown_key", "3d"])
             self.assertEqual(result, 1)
             self.assertEqual(
                 stderr.getvalue().strip(),

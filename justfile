@@ -64,7 +64,7 @@ test-e2e: snapshot
 
     sudo dnf "${dnf_opts[@]}" --noplugins remove -y dnf-plugin-anyrepo || true
     sudo dnf "${dnf_opts[@]}" --noplugins install -y $rpm_path
-    sudo dnf-anyrepo add https://github.com/jfut/prec --force
+    sudo dnf-anyrepo add https://github.com/jfut/prec --minimum-release-age 0 --force
     sudo dnf-anyrepo list
     sudo dnf "${dnf_opts[@]}" list prec | tee "$tmp/dnf-list.txt"
     grep 'github.com:jfut:prec' "$tmp/dnf-list.txt"
@@ -95,11 +95,11 @@ exec-test:
     {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" global set cache_dir "$tmp/cache"
     {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" list
     {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" global show
-    {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" repo show prec
+    {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" repo prec show
     {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" global set minimum_release_age 1h
     test "$({{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" global get minimum_release_age)" = "3600"
-    {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" repo set prec enabled false
-    {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" repo unset prec enabled
+    {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" repo prec set enabled false
+    {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" repo prec unset enabled
     {{PYTHON}} -m dnf_plugin_anyrepo.cli --config "$tmp/anyrepo.conf" remove prec --purge-cache
 
 # Run lint, unit tests, and smoke tests.

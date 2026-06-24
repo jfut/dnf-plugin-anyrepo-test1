@@ -81,7 +81,7 @@ sslcert-cli         github-release  https://github.com/jfut/sslcert-cli         
 Show details for one AnyRepo repository:
 
 ```bash
-# dnf-anyrepo repo show prec
+# dnf-anyrepo repo prec show
 name: prec
 source: github-release
 owner: jfut
@@ -123,8 +123,8 @@ Repositories without their own `minimum_release_age` override inherit this value
 Change `minimum_release_age` for individual repositories:
 
 ```bash
-# dnf-anyrepo repo set nmcli-cli minimum_release_age 3h
-# dnf-anyrepo repo set sslcert-cli minimum_release_age 5h
+# dnf-anyrepo repo nmcli-cli set minimum_release_age 3h
+# dnf-anyrepo repo sslcert-cli set minimum_release_age 5h
 ```
 
 Refresh the local cache explicitly:
@@ -380,10 +380,10 @@ dnf-anyrepo global set minimum_release_age 1d
 dnf-anyrepo global unset minimum_release_age
 
 # Override only one repository to 30 minutes.
-dnf-anyrepo repo set NAME minimum_release_age 30m
+dnf-anyrepo repo NAME set minimum_release_age 30m
 
 # Remove the repository-specific override.
-dnf-anyrepo repo unset NAME minimum_release_age
+dnf-anyrepo repo NAME unset minimum_release_age
 ```
 
 The `global` commands update `[main]` and affect repositories that inherit the global setting.
@@ -447,10 +447,10 @@ dnf-anyrepo global unset minimum_release_age
 Update repository settings:
 
 ```bash
-dnf-anyrepo repo show prec
-dnf-anyrepo repo set prec minimum_release_age 1d
-dnf-anyrepo repo set prec enabled false
-dnf-anyrepo repo unset prec minimum_release_age
+dnf-anyrepo repo prec show
+dnf-anyrepo repo prec set minimum_release_age 1d
+dnf-anyrepo repo prec set enabled false
+dnf-anyrepo repo prec unset minimum_release_age
 ```
 
 Refresh and remove repositories:
