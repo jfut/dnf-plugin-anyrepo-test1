@@ -276,12 +276,17 @@ if dnf is not None:
             ts.setVSFlags(rpm._RPMVSF_NOSIGNATURES)
             with open(path, "rb") as fh:
                 header = ts.hdrFromFdno(fh)
-            signature_tags = (
-                rpm.RPMTAG_RSAHEADER,
-                rpm.RPMTAG_DSAHEADER,
-                rpm.RPMTAG_SIGPGP,
-                rpm.RPMTAG_SIGGPG,
-                rpm.RPMTAG_OPENPGP,
+            # Support older rpm Python bindings that do not expose every tag constant.
+            signature_tags = tuple(
+                getattr(rpm, name)
+                for name in (
+                    "RPMTAG_RSAHEADER",
+                    "RPMTAG_DSAHEADER",
+                    "RPMTAG_SIGPGP",
+                    "RPMTAG_SIGGPG",
+                    "RPMTAG_OPENPGP",
+                )
+                if hasattr(rpm, name)
             )
             for tag in signature_tags:
                 value = header[tag]
