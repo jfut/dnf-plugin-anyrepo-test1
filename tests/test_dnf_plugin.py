@@ -32,7 +32,7 @@ class DnfPluginTest(unittest.TestCase):
                 name="prec",
                 source="github-release",
                 url="https://github.com/jfut/prec",
-                asset_regex=r".*\.rpm$",
+                asset_include=r".*\.rpm$",
                 enabled=True,
                 minimum_release_age=0,
                 cache_dir=tmp,
@@ -75,7 +75,7 @@ class DnfPluginTest(unittest.TestCase):
             name="prec",
             source="github-release",
             url="https://github.com/jfut/prec",
-            asset_regex=r".*\.rpm$",
+            asset_include=r".*\.rpm$",
             enabled=True,
             minimum_release_age=0,
             cache_dir="/tmp",
@@ -88,7 +88,7 @@ class DnfPluginTest(unittest.TestCase):
             name="prec",
             source="github-release",
             url="https://github.com/jfut/prec",
-            asset_regex=r".*\.rpm$",
+            asset_include=r".*\.rpm$",
             enabled=True,
             minimum_release_age=0,
             cache_dir="/tmp",
@@ -178,7 +178,7 @@ class DnfPluginTest(unittest.TestCase):
                 name="prec",
                 source="github-release",
                 url="https://github.com/jfut/prec",
-                asset_regex=r".*\.rpm$",
+                asset_include=r".*\.rpm$",
                 enabled=True,
                 minimum_release_age=0,
                 cache_dir=tmp,
@@ -249,6 +249,32 @@ class DnfPluginTest(unittest.TestCase):
             "configure the following:\n"
             "- dnf-anyrepo repo nmcli set gpgcheck 0\n\n",
         )
+
+    @unittest.skipIf(dnf is None, "dnf is not available")
+    def test_package_is_signed_ignores_missing_openpgp_tag(self):
+        base = dnf.Base()
+        plugin = AnyRepoPlugin(base, None)
+        pkg = mock.Mock()
+        pkg.localPkg.return_value = "/tmp/dummy.rpm"
+        header = {267: None, 268: b"sig", 259: None, 262: None}
+        ts = mock.Mock()
+        ts.hdrFromFdno.return_value = header
+
+        with mock.patch("dnf_plugin_anyrepo.dnf_plugin.rpm.TransactionSet", return_value=ts):
+            with mock.patch("dnf_plugin_anyrepo.dnf_plugin.rpm._RPMVSF_NOSIGNATURES", 0):
+                with mock.patch("builtins.open", mock.mock_open(read_data=b"rpm")):
+                    with mock.patch(
+                        "dnf_plugin_anyrepo.dnf_plugin.rpm",
+                        mock.Mock(
+                            RPMTAG_RSAHEADER=268,
+                            RPMTAG_DSAHEADER=267,
+                            RPMTAG_SIGPGP=259,
+                            RPMTAG_SIGGPG=262,
+                            TransactionSet=mock.Mock(return_value=ts),
+                            _RPMVSF_NOSIGNATURES=0,
+                        ),
+                    ):
+                        self.assertTrue(plugin._package_is_signed(pkg))
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from typing import Iterable, Optional
 
 from dnf_plugin_anyrepo.config import ConfigError, PluginConfig, RepoConfig, load_config
 from dnf_plugin_anyrepo.providers.github_release import GitHubReleaseProvider
+from dnf_plugin_anyrepo import repo as local_repo
 from dnf_plugin_anyrepo.state import load_state
 
 
@@ -56,7 +57,18 @@ class RepositoryManager:
             return True
         if state.get("releasever") != repo.releasever:
             return True
+        # Refresh once after upgrade so source/debug side repositories are created.
+        if "debug_asset_names" not in state or "source_asset_names" not in state:
+            return True
         if not os.path.isdir(os.path.join(repo.cache_path, "repodata")):
+            return True
+        if state.get("debug_asset_names") and not local_repo.has_repodata(
+            local_repo.subrepo_cache_path(repo.cache_path, "debuginfo")
+        ):
+            return True
+        if state.get("source_asset_names") and not local_repo.has_repodata(
+            local_repo.subrepo_cache_path(repo.cache_path, "source")
+        ):
             return True
         refreshed = state.get("last_refresh_at")
         if not refreshed:

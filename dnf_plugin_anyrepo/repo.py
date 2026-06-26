@@ -17,6 +17,12 @@ def packages_dir(cache_path: str) -> str:
     return os.path.join(cache_path, "packages")
 
 
+def subrepo_cache_path(cache_path: str, subrepo: str) -> str:
+    """Return the cache path for an auxiliary repository under the main cache."""
+
+    return os.path.join(cache_path, subrepo)
+
+
 def has_repodata(cache_path: str) -> bool:
     return os.path.isdir(os.path.join(cache_path, "repodata"))
 
