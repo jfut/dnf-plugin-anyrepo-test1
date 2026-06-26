@@ -21,7 +21,7 @@ from dnf_plugin_anyrepo.config import (
     parse_bool,
 )
 from dnf_plugin_anyrepo.manager import RepositoryManager
-from dnf_plugin_anyrepo.repo import has_repodata
+from dnf_plugin_anyrepo.repo import has_repodata, subrepo_cache_path
 
 
 REPO_SWITCH_ID = "anyrepo"
@@ -35,6 +35,18 @@ def github_repo_id(repo):
 
     owner, name = repo.owner_repo
     return f"github.com:{owner}:{name}"
+
+
+def github_debug_repo_id(repo):
+    """Match DNF's debug repo naming so debug commands can auto-enable it."""
+
+    return f"{github_repo_id(repo)}-debuginfo"
+
+
+def github_source_repo_id(repo):
+    """Match DNF's source repo naming so source downloads can auto-enable it."""
+
+    return f"{github_repo_id(repo)}-source"
 
 
 def repo_switch_enabled(path=REPO_SWITCH_PATH):
@@ -146,9 +158,11 @@ if dnf is not None:
                 self._warn(f"failed to load AnyRepo configuration: {exc}")
                 return
             self._anyrepo_debug = manager.config.main.debug
-            self._anyrepo_repo_names = {
-                github_repo_id(repo): repo.name for repo in manager.enabled_repos()
-            }
+            self._anyrepo_repo_names = {}
+            for repo in manager.enabled_repos():
+                self._anyrepo_repo_names[github_repo_id(repo)] = repo.name
+                self._anyrepo_repo_names[github_debug_repo_id(repo)] = repo.name
+                self._anyrepo_repo_names[github_source_repo_id(repo)] = repo.name
             self._anyrepo_repo_ids = set(self._anyrepo_repo_names)
             try:
                 enabled = repo_switch_enabled()
@@ -170,10 +184,35 @@ if dnf is not None:
             for repo in manager.enabled_repos():
                 if has_repodata(repo.cache_path):
                     self._add_file_repo(repo)
+                debug_cache_path = subrepo_cache_path(repo.cache_path, "debuginfo")
+                if has_repodata(debug_cache_path):
+                    self._add_file_repo(
+                        repo,
+                        repo_id=github_debug_repo_id(repo),
+                        cache_path=debug_cache_path,
+                        name_suffix=" debuginfo",
+                        enabled=False,
+                    )
+                source_cache_path = subrepo_cache_path(repo.cache_path, "source")
+                if has_repodata(source_cache_path):
+                    self._add_file_repo(
+                        repo,
+                        repo_id=github_source_repo_id(repo),
+                        cache_path=source_cache_path,
+                        name_suffix=" source",
+                        enabled=False,
+                    )
 
-        def _add_file_repo(self, repo):
-            repo_id = github_repo_id(repo)
-            baseurl = "file://" + os.path.abspath(repo.cache_path)
+        def _add_file_repo(
+            self,
+            repo,
+            repo_id=None,
+            cache_path=None,
+            name_suffix="",
+            enabled=True,
+        ):
+            repo_id = repo_id or github_repo_id(repo)
+            baseurl = "file://" + os.path.abspath(cache_path or repo.cache_path)
             if getattr(self, "_anyrepo_debug", False):
                 dnf_repo = self.base.repos.add_new_repo(repo_id, self.base.conf, baseurl=[baseurl])
             else:
@@ -181,8 +220,8 @@ if dnf is not None:
                 dnf_repo = dnf.repo.Repo(repo_id, self.base.conf)
                 dnf_repo.baseurl += [baseurl]
                 self.base.repos.add(dnf_repo)
-            dnf_repo.name = f"GitHub {repo.name}"
-            dnf_repo.enabled = True
+            dnf_repo.name = f"GitHub {repo.name}{name_suffix}"
+            dnf_repo.enabled = enabled
             dnf_repo.skip_if_unavailable = True
             dnf_repo.metadata_expire = 0
             dnf_repo.gpgcheck = effective_repo_gpgcheck(

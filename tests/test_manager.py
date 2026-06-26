@@ -72,6 +72,34 @@ class RepositoryManagerTest(unittest.TestCase):
             manager = RepositoryManager(config=config)
             self.assertTrue(manager.needs_refresh(repo))
 
+    def test_needs_refresh_when_auxiliary_repo_state_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = RepoConfig(
+                name="prec",
+                source="github-release",
+                url="https://github.com/jfut/prec",
+                asset_include=r".*\.rpm$",
+                enabled=True,
+                minimum_release_age=0,
+                cache_dir=tmp,
+                refresh_interval=600,
+                arch="x86_64",
+                releasever="el9",
+            )
+            os.makedirs(os.path.join(repo.cache_path, "repodata"))
+            save_state(
+                repo.cache_path,
+                {
+                    "arch": "x86_64",
+                    "releasever": "el9",
+                    "last_refresh_at": "2099-01-01T00:00:00Z",
+                },
+            )
+
+            config = PluginConfig(path="", main=MainConfig(cache_dir=tmp), repos={"prec": repo})
+            manager = RepositoryManager(config=config)
+            self.assertTrue(manager.needs_refresh(repo))
+
 
 if __name__ == "__main__":
     unittest.main()

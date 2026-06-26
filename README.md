@@ -10,6 +10,7 @@ The current implementation supports GitHub Releases via `source = github-release
 ## Why use it
 
 With this plugin, users can install and update RPMs published as remote release assets through ordinary DNF commands.
+
 AnyRepo refreshes and registers the matching assets as local `file://` repositories behind the scenes, so users do not need to download RPM files or manage repository metadata manually.
 
 Typical examples:
@@ -361,6 +362,11 @@ Default excludes:
 - `debuginfo` RPMs
 - `debugsource` RPMs
 - `src.rpm`
+
+AnyRepo keeps those packages out of the primary binary repository, then publishes matching auxiliary repositories with DNF's standard suffixes when assets exist:
+
+- `-debuginfo` for `dnf download --debuginfo`, `dnf download --debugsource`, and `dnf debuginfo-install`
+- `-source` for `dnf download --source`
 
 Architecture behavior:
 

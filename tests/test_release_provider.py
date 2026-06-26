@@ -71,6 +71,35 @@ class GitHubReleaseProviderTest(unittest.TestCase):
             )
             self.assertEqual([asset["name"] for asset in assets], ["tool-1.0-1.x86_64.rpm"])
 
+    def test_matching_debug_and_source_assets_use_auxiliary_repositories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.make_config(tmp, name="tool")
+            config.asset_include = r"\.rpm$"
+            config.arch = "x86_64"
+            config.releasever = "el9"
+            provider = GitHubReleaseProvider(config)
+            release = {
+                "assets": [
+                    {"name": "tool-1.0-1.module_el9.1.2.x86_64.rpm"},
+                    {"name": "tool-debuginfo-1.0-1.module_el9.1.2.x86_64.rpm"},
+                    {"name": "tool-debugsource-1.0-1.module_el9.1.2.x86_64.rpm"},
+                    {"name": "tool-1.0-1.module_el9.1.2.src.rpm"},
+                    {"name": "tool-1.0-1.el10.x86_64.rpm"},
+                ]
+            }
+
+            self.assertEqual(
+                [asset["name"] for asset in provider._matching_debug_assets(release)],
+                [
+                    "tool-debuginfo-1.0-1.module_el9.1.2.x86_64.rpm",
+                    "tool-debugsource-1.0-1.module_el9.1.2.x86_64.rpm",
+                ],
+            )
+            self.assertEqual(
+                [asset["name"] for asset in provider._matching_source_assets(release)],
+                ["tool-1.0-1.module_el9.1.2.src.rpm"],
+            )
+
     def test_matching_assets_allows_override_of_default_asset_exclude(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self.make_config(tmp)

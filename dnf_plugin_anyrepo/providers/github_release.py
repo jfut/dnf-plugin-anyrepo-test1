@@ -44,6 +44,8 @@ class GitHubReleaseProvider:
         self.config = config
         self.release: Optional[Dict[str, object]] = None
         self.assets: List[Dict[str, object]] = []
+        self.debug_assets: List[Dict[str, object]] = []
+        self.source_assets: List[Dict[str, object]] = []
         self.state: Dict[str, object] = load_state(config.cache_path)
 
     def refresh(self) -> bool:
@@ -59,12 +61,32 @@ class GitHubReleaseProvider:
         assets = self._matching_assets(release)
         if not assets:
             raise ProviderError(f"{self.config.name}: no assets match {self.config.asset_include}")
+        debug_assets = self._matching_debug_assets(release)
+        source_assets = self._matching_source_assets(release)
 
         self.release = release
         self.assets = assets
-        cache_missing = not self._cached_assets_exist()
+        self.debug_assets = debug_assets
+        self.source_assets = source_assets
+        cache_missing = not self._asset_cache_complete(
+            assets,
+            self.config.cache_path,
+            "asset_names",
+        )
+        cache_missing = cache_missing or not self._asset_cache_complete(
+            debug_assets,
+            self._debug_cache_path(),
+            "debug_asset_names",
+        )
+        cache_missing = cache_missing or not self._asset_cache_complete(
+            source_assets,
+            self._source_cache_path(),
+            "source_asset_names",
+        )
         changed = local_repo.desired_asset_changed(self.state, release, assets)
-        if changed or cache_missing or not local_repo.has_repodata(self.config.cache_path):
+        changed = changed or self._asset_group_changed(debug_assets, prefix="debug_")
+        changed = changed or self._asset_group_changed(source_assets, prefix="source_")
+        if changed or cache_missing:
             self._replace_cache()
             return True
 
@@ -78,14 +100,7 @@ class GitHubReleaseProvider:
     def download(self, cache_path: Optional[str] = None) -> None:
         if self.release is None:
             raise ProviderError("release metadata is not loaded")
-        cache_path = cache_path or self.config.cache_path
-        local_repo.ensure_cache_dirs(cache_path)
-        local_repo.clean_packages(cache_path)
-        for asset in self.assets:
-            name = str(asset["name"])
-            url = str(asset["browser_download_url"])
-            destination = os.path.join(local_repo.packages_dir(cache_path), name)
-            self._download_file(url, destination)
+        self._download_asset_group(self.assets, cache_path or self.config.cache_path)
 
     def _replace_cache(self) -> None:
         parent = os.path.dirname(self.config.cache_path) or "."
@@ -94,6 +109,14 @@ class GitHubReleaseProvider:
         try:
             self.download(cache_path=staging)
             local_repo.run_createrepo(staging)
+            if self.debug_assets:
+                debug_cache_path = self._debug_cache_path(staging)
+                self._download_asset_group(self.debug_assets, debug_cache_path)
+                local_repo.run_createrepo(debug_cache_path)
+            if self.source_assets:
+                source_cache_path = self._source_cache_path(staging)
+                self._download_asset_group(self.source_assets, source_cache_path)
+                local_repo.run_createrepo(source_cache_path)
             self._save_state(cache_path=staging)
             local_repo.replace_cache(staging, self.config.cache_path)
         except Exception:
@@ -131,17 +154,48 @@ class GitHubReleaseProvider:
         return None
 
     def _matching_assets(self, release: Mapping[str, object]) -> List[Dict[str, object]]:
-        pattern = re.compile(self.config.asset_include)
-        exclude_pattern = re.compile(self.config.asset_exclude)
+        return self._select_assets(
+            release,
+            include_pattern=self.config.asset_include,
+            exclude_pattern=self.config.asset_exclude,
+            match_arch=True,
+        )
+
+    def _matching_debug_assets(self, release: Mapping[str, object]) -> List[Dict[str, object]]:
+        return self._select_assets(
+            release,
+            include_pattern=r"(?:-debuginfo(?:-|[.])|-debugsource(?:-|[.])).*[.]rpm$",
+            match_arch=True,
+        )
+
+    def _matching_source_assets(self, release: Mapping[str, object]) -> List[Dict[str, object]]:
+        return self._select_assets(
+            release,
+            include_pattern=r"[.]src[.]rpm$",
+            match_arch=False,
+        )
+
+    def _select_assets(
+        self,
+        release: Mapping[str, object],
+        include_pattern: str,
+        exclude_pattern: Optional[str] = None,
+        match_arch: bool = True,
+    ) -> List[Dict[str, object]]:
+        pattern = re.compile(include_pattern)
+        exclude = re.compile(exclude_pattern) if exclude_pattern else None
         assets = []
         for asset in release.get("assets", []):
             if not isinstance(asset, dict):
                 continue
             name = str(asset.get("name", ""))
-            if exclude_pattern.search(name):
+            if exclude and exclude.search(name):
                 continue
-            if pattern.search(name) and self._matches_arch(name):
-                assets.append(asset)
+            if not pattern.search(name):
+                continue
+            if match_arch and not self._matches_arch(name):
+                continue
+            assets.append(asset)
         return self._filter_releasever_assets(assets)
 
     def _matches_arch(self, name: str) -> bool:
@@ -186,11 +240,28 @@ class GitHubReleaseProvider:
         age = (datetime.now(timezone.utc) - published).total_seconds()
         return age >= self.config.minimum_release_age
 
-    def _cached_assets_exist(self) -> bool:
-        names = self.state.get("asset_names") or []
+    def _asset_cache_complete(
+        self,
+        assets: List[Dict[str, object]],
+        cache_path: str,
+        state_key: str,
+    ) -> bool:
+        if not assets:
+            return True
+        names = self.state.get(state_key) or []
         if not names:
             return False
-        return all(os.path.isfile(os.path.join(local_repo.packages_dir(self.config.cache_path), name)) for name in names)
+        if not local_repo.has_repodata(cache_path):
+            return False
+        return all(os.path.isfile(os.path.join(local_repo.packages_dir(cache_path), name)) for name in names)
+
+    def _asset_group_changed(self, assets: List[Dict[str, object]], prefix: str) -> bool:
+        return (
+            self.state.get(f"{prefix}asset_ids") != [asset.get("id") for asset in assets]
+            or self.state.get(f"{prefix}asset_updated_at")
+            != [asset.get("updated_at") for asset in assets]
+            or self.state.get(f"{prefix}asset_names") != [asset.get("name") for asset in assets]
+        )
 
     def _save_state(self, cache_path: Optional[str] = None) -> None:
         if self.release is None:
@@ -202,6 +273,12 @@ class GitHubReleaseProvider:
             "asset_ids": [asset.get("id") for asset in self.assets],
             "asset_names": [asset.get("name") for asset in self.assets],
             "asset_updated_at": [asset.get("updated_at") for asset in self.assets],
+            "debug_asset_ids": [asset.get("id") for asset in self.debug_assets],
+            "debug_asset_names": [asset.get("name") for asset in self.debug_assets],
+            "debug_asset_updated_at": [asset.get("updated_at") for asset in self.debug_assets],
+            "source_asset_ids": [asset.get("id") for asset in self.source_assets],
+            "source_asset_names": [asset.get("name") for asset in self.source_assets],
+            "source_asset_updated_at": [asset.get("updated_at") for asset in self.source_assets],
             "arch": self.config.arch,
             "releasever": self.config.releasever,
             "updated_at": utcnow_iso(),
@@ -209,6 +286,25 @@ class GitHubReleaseProvider:
         }
         save_state(cache_path or self.config.cache_path, state)
         self.state = state
+
+    def _download_asset_group(
+        self,
+        assets: List[Dict[str, object]],
+        cache_path: str,
+    ) -> None:
+        local_repo.ensure_cache_dirs(cache_path)
+        local_repo.clean_packages(cache_path)
+        for asset in assets:
+            name = str(asset["name"])
+            url = str(asset["browser_download_url"])
+            destination = os.path.join(local_repo.packages_dir(cache_path), name)
+            self._download_file(url, destination)
+
+    def _debug_cache_path(self, cache_path: Optional[str] = None) -> str:
+        return local_repo.subrepo_cache_path(cache_path or self.config.cache_path, "debuginfo")
+
+    def _source_cache_path(self, cache_path: Optional[str] = None) -> str:
+        return local_repo.subrepo_cache_path(cache_path or self.config.cache_path, "source")
 
     def _download_file(self, url: str, destination: str) -> None:
         request = urllib.request.Request(url, headers=self._headers())
